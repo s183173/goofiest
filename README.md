@@ -45,10 +45,18 @@ and anywhere else in the container.
 
 ## Troubleshooting
 
+- **Desktop looks black / empty right after a (re)build**: Plasma's first
+  start can take a minute or two. If it stays empty, run
+  `/home/vscode/start-vnc.sh` once in the VS Code terminal (it is idempotent
+  — it only starts what is missing), then reload the browser tab.
 - **Port 6080 page loads but shows "connection refused" / black screen**:
   the desktop services may not have started. In the VS Code terminal run
   `/home/vscode/start-vnc.sh` (it is idempotent — it only starts what is
   missing), then reload the browser tab.
+- **Desktop gone after the Codespace stopped and restarted**: the start
+  script clears stale `/tmp/.X1-lock` files left by an unclean shutdown and
+  brings the desktop back on its own; give it a few seconds after the
+  container comes up, then reload the tab.
 - **Desktop looks frozen after long idle**: Codespaces stops idle containers.
   Restart the Codespace; `postStartCommand` brings the desktop back.
 - **Anything else broken**: run **Codespaces: Rebuild Container** for a
