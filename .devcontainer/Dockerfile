@@ -26,12 +26,12 @@ RUN mkdir -p /home/vscode/.vnc && \
     echo "password" | vncpasswd -f > /home/vscode/.vnc/passwd && \
     chmod 600 /home/vscode/.vnc/passwd
 
-# Launch KDE Plasma (X11) when the VNC server starts.
+# Launch KDE Plasma (X11) in its own session D-Bus when VNC starts.
 RUN printf '%s\n' \
     '#!/bin/sh' \
     'unset SESSION_MANAGER' \
     'unset DBUS_SESSION_BUS_ADDRESS' \
-    'exec startplasma-x11' \
+    'exec dbus-run-session -- startplasma-x11' \
     > /home/vscode/.vnc/xstartup && \
     chmod +x /home/vscode/.vnc/xstartup
 
