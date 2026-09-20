@@ -36,8 +36,9 @@ RUN printf '%s\n' \
     chmod +x /home/vscode/.vnc/xstartup
 
 # Browser access: noVNC + websockify on port 6080, started idempotently.
-COPY start-vnc.sh /home/vscode/start-vnc.sh
-RUN chmod +x /home/vscode/start-vnc.sh
+# --chown/--chmod matter: COPY defaults to root ownership, and the later
+# devcontainer steps run as "vscode", which cannot chmod a root-owned file.
+COPY --chown=vscode:vscode --chmod=0755 start-vnc.sh /home/vscode/start-vnc.sh
 
 EXPOSE 6080
 USER vscode
