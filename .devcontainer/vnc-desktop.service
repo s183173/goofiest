@@ -1,0 +1,14 @@
+[Unit]
+Description=Fedora KDE desktop over VNC (Xvnc + Plasma + noVNC)
+Documentation=https://github.com/s183173/goofiest
+After=systemd-user-sessions.service network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=vscode
+ExecStart=/usr/local/bin/start-vnc.sh
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

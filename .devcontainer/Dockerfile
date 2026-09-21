@@ -1,18 +1,45 @@
 FROM quay.io/fedora/fedora:44
 
-# KDE Plasma desktop. Since Fedora 43 the X11 session lives in its own
-# package (plasma-workspace-x11); TigerVNC's Xvnc needs startplasma-x11
-# from it, so it is installed explicitly.
+# The full Fedora KDE Spin desktop. @kde-desktop-environment is the same
+# comps environment the official Fedora KDE Spin installs, so the app set,
+# wallpapers, system components and defaults match a normal Fedora KDE
+# installation instead of a hand-picked minimum.
+# Since Fedora 43 the X11 session lives in its own package
+# (plasma-workspace-x11); TigerVNC's Xvnc needs startplasma-x11 from it, so
+# it stays explicit. openssh-server is what GitHub Codespaces' "gh codespace
+# ssh" connects to.
 RUN dnf install -y \
-    @kde-desktop \
+    @kde-desktop-environment \
     plasma-workspace-x11 \
     tigervnc-server \
     novnc \
     python3-websockify \
     dbus-x11 \
+    openssh-server \
     sudo \
     git \
     && dnf clean all
+
+# Fedora-KDE identity extras: the spin's wallpaper and KDE-branded
+# os-release (PRETTY_NAME "Fedora Linux 44 (KDE Plasma)"). Tolerant so a
+# renamed package can never break the build.
+RUN (dnf install -y f44-backgrounds-kde kde-settings || \
+     echo "[build] branding extras unavailable, skipping") \
+    && dnf clean all
+
+# Onboarding: the KDE Welcome Center, which also autostarts on first login
+# on a fresh Fedora KDE account. Same tolerant pattern as above.
+RUN (dnf install -y plasma-welcome || \
+     echo "[build] plasma-welcome unavailable, skipping") \
+    && dnf clean all
+
+# sshd host keys so Codespaces can bring up its SSH bridge on connect.
+RUN ssh-keygen -A
+
+# Units that cannot work inside a container (no VTs) would otherwise show
+# up as failed services on `systemctl`; mask/disable them quietly.
+RUN systemctl mask getty@.service serial-getty@.service 2>/dev/null; \
+    systemctl disable sddm.service 2>/dev/null; true
 
 # Non-root user with passwordless sudo (Codespaces-friendly name).
 RUN useradd -m -s /bin/bash vscode && \
@@ -35,10 +62,18 @@ RUN printf '%s\n' \
     > /home/vscode/.vnc/xstartup && \
     chmod +x /home/vscode/.vnc/xstartup
 
-# Browser access: noVNC + websockify on port 6080, started idempotently.
-# --chown/--chmod matter: COPY defaults to root ownership, and the later
-# devcontainer steps run as "vscode", which cannot chmod a root-owned file.
-COPY --chown=vscode:vscode --chmod=0755 start-vnc.sh /home/vscode/start-vnc.sh
+# Boot scripts and the systemd unit that runs the desktop. They live in
+# /usr/local/bin (root-owned) instead of $HOME, so the home folder reads
+# like a fresh Fedora home: Desktop, Documents, Downloads, ... and nothing
+# that belongs to the plumbing.
+COPY --chmod=0755 start-vnc.sh /usr/local/bin/start-vnc.sh
+COPY --chmod=0755 start-systemd.sh /usr/local/bin/start-systemd.sh
+COPY --chmod=0755 start-desktop.sh /usr/local/bin/start-desktop.sh
+COPY --chmod=0644 vnc-desktop.service /etc/systemd/system/vnc-desktop.service
+
+# The desktop comes up with the systemd boot (see start-systemd.sh); the
+# enablement is done here at build time, like any Fedora service.
+RUN systemctl enable vnc-desktop.service 2>/dev/null || true
 
 EXPOSE 6080
 USER vscode

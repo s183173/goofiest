@@ -3,6 +3,8 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/goofiest,type=bind",
+  "workspaceFolder": "/home/vscode/goofiest",
   "forwardPorts": [6080],
   "portsAttributes": {
     "6080": {
@@ -11,6 +13,6 @@
     }
   },
   "remoteUser": "vscode",
-  "postStartCommand": "/home/vscode/start-vnc.sh",
-  "postAttachCommand": "/home/vscode/start-vnc.sh"
+  "postStartCommand": "/usr/local/bin/start-desktop.sh",
+  "postAttachCommand": "/usr/local/bin/start-desktop.sh"
 }
