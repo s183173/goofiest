@@ -3,9 +3,9 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/goofiest,type=bind",
-  "workspaceFolder": "/home/vscode/goofiest",
-  "forwardPorts": [6080],
+  "forwardPorts": [
+    6080
+  ],
   "portsAttributes": {
     "6080": {
       "label": "noVNC Desktop",

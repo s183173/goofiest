@@ -47,6 +47,25 @@ RUN useradd -m -s /bin/bash vscode && \
     echo "vscode ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/vscode && \
     chmod 0440 /etc/sudoers.d/vscode
 
+# Codespaces always mounts the repo at /workspaces/<repo>; a symlink makes
+# it feel like a normal Fedora home ("my project lives in my home dir").
+# VS Code still opens /workspaces/goofiest as the workspace.
+RUN ln -sfn /workspaces/goofiest /home/vscode/goofiest
+
+# Boot scripts and the systemd unit that runs the desktop. They live in
+# /usr/local/bin (root-owned) instead of $HOME, so the home folder reads
+# like a fresh Fedora home: Desktop, Documents, Downloads, ... and nothing
+# that belongs to the plumbing.
+COPY --chmod=0755 start-vnc.sh /usr/local/bin/start-vnc.sh
+COPY --chmod=0755 start-systemd.sh /usr/local/bin/start-systemd.sh
+COPY --chmod=0755 start-desktop.sh /usr/local/bin/start-desktop.sh
+COPY --chmod=0644 vnc-desktop.service /etc/systemd/system/vnc-desktop.service
+
+# The desktop comes up with the systemd boot (see start-systemd.sh); the
+# enablement is done here at build time, like any Fedora service. This must
+# run as root, so it stays above the USER switch.
+RUN systemctl enable vnc-desktop.service 2>/dev/null || true
+
 USER vscode
 
 # VNC password. Change "password" to something else and rebuild to update.
@@ -62,19 +81,6 @@ RUN printf '%s\n' \
     'exec dbus-run-session -- startplasma-x11' \
     > /home/vscode/.vnc/xstartup && \
     chmod +x /home/vscode/.vnc/xstartup
-
-# Boot scripts and the systemd unit that runs the desktop. They live in
-# /usr/local/bin (root-owned) instead of $HOME, so the home folder reads
-# like a fresh Fedora home: Desktop, Documents, Downloads, ... and nothing
-# that belongs to the plumbing.
-COPY --chmod=0755 start-vnc.sh /usr/local/bin/start-vnc.sh
-COPY --chmod=0755 start-systemd.sh /usr/local/bin/start-systemd.sh
-COPY --chmod=0755 start-desktop.sh /usr/local/bin/start-desktop.sh
-COPY --chmod=0644 vnc-desktop.service /etc/systemd/system/vnc-desktop.service
-
-# The desktop comes up with the systemd boot (see start-systemd.sh); the
-# enablement is done here at build time, like any Fedora service.
-RUN systemctl enable vnc-desktop.service 2>/dev/null || true
 
 EXPOSE 6080
 USER vscode

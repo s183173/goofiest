@@ -20,9 +20,9 @@ extra setup.
    login the **KDE Welcome Center** opens, just like on a fresh Fedora KDE
    install — it is the regular onboarding flow, not a custom screen.
 
-The repo checkout lives at `~/goofiest` inside the container (both in the
-VS Code workspace and in the desktop's file manager), so file paths read
-like they would on a normal Fedora machine.
+The repo checkout lives at `/workspaces/goofiest` (where Codespaces mounts
+it), and a `~/goofiest` symlink makes it read like a normal Fedora home
+path in the desktop's file manager and terminal.
 
 ## Details
 
