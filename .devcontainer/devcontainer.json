@@ -3,6 +3,19 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  // GitHub Codespaces are devcontainers, and the spec supports giving the
+  // container a real Linux boot:
+  //   privileged: true      -> the runtime starts the container with the
+  //                            capabilities systemd needs (--privileged);
+  //   overrideCommand:false -> the container's own command (the image CMD,
+  //                            container-init.sh) runs as PID 1 instead of
+  //                            a forced "sleep infinity" loop, so systemd
+  //                            can be the true init, exactly like a
+  //                            normal Fedora machine booting up.
+  // container-init.sh keeps every path safe: if either property is not
+  // honoured, it falls back to the previous direct-start behaviour.
+  "privileged": true,
+  "overrideCommand": false,
   "forwardPorts": [
     6080
   ],

@@ -69,10 +69,13 @@ COPY --chmod=0755 start-systemd.sh /usr/local/bin/start-systemd.sh
 COPY --chmod=0755 start-desktop.sh /usr/local/bin/start-desktop.sh
 COPY --chmod=0644 vnc-desktop.service /etc/systemd/system/vnc-desktop.service
 
-# The desktop comes up with the systemd boot (see start-systemd.sh); the
-# enablement is done here at build time, like any Fedora service. This must
-# run as root, so it stays above the USER switch.
+# Services that a normal Fedora boot starts. This must run as root, so it
+# stays above the USER switch.
 RUN systemctl enable vnc-desktop.service 2>/dev/null || true
+
+# sshd: a real Fedora service under systemd (Codespaces' SSH bridge can use
+# it, and `systemctl status sshd` reads like on a normal machine).
+RUN systemctl enable sshd.service 2>/dev/null || true
 
 USER vscode
 
@@ -91,4 +94,11 @@ RUN printf '%s\n' \
     chmod +x /home/vscode/.vnc/xstartup
 
 EXPOSE 6080
-USER vscode
+
+# The container's main process. With the devcontainer "privileged": true +
+# "overrideCommand": false properties honoured, this boots systemd as the
+# real init — a normal Fedora machine power-on (see container-init.sh). It
+# must run as root: system systemd refuses to run as a non-root PID 1.
+COPY --chmod=0755 container-init.sh /usr/local/bin/container-init.sh
+USER root
+CMD ["/usr/local/bin/container-init.sh"]
