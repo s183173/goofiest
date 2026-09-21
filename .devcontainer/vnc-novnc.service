@@ -1,0 +1,16 @@
+[Unit]
+Description=noVNC browser bridge for the Fedora KDE desktop (websockify)
+Documentation=https://github.com/s183173/goofiest
+After=vnc-desktop.service
+Wants=vnc-desktop.service
+
+[Service]
+Type=simple
+User=vscode
+Environment=HOME=/home/vscode
+ExecStart=/usr/bin/websockify --web /usr/share/novnc/ 6080 localhost:5901
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

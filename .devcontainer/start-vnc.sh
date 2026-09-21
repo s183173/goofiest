@@ -36,11 +36,16 @@ else
 fi
 
 # Start the noVNC browser bridge if nothing is listening on 6080.
-# setsid detaches websockify from this script's session: Codespaces reaps
-# the whole process tree of postStartCommand when it exits, and a plain
-# "nohup ... &" child dies with it. Xvnc survives on its own because
-# vncserver(1) daemonizes properly.
-if timeout 1 bash -c '</dev/tcp/127.0.0.1/6080' 2>/dev/null; then
+# Under a systemd boot the bridge is its own supervised unit
+# (vnc-novnc.service, Restart=always) — the same job a real Fedora box does
+# with a unit file — so this block is only for the direct-start fallback
+# path. There, setsid detaches websockify from this script's session:
+# Codespaces reaps the whole process tree of postStartCommand when it
+# exits, and a plain "nohup ... &" child dies with it. Xvnc survives on its
+# own because vncserver(1) daemonizes properly.
+if [ -d /run/systemd/system ]; then
+    echo "[start-vnc] systemd boot: noVNC bridge is managed by vnc-novnc.service."
+elif timeout 1 bash -c '</dev/tcp/127.0.0.1/6080' 2>/dev/null; then
     echo "[start-vnc] noVNC already running."
 else
     echo "[start-vnc] Starting noVNC on port 6080..."

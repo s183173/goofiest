@@ -68,10 +68,11 @@ COPY --chmod=0755 start-vnc.sh /usr/local/bin/start-vnc.sh
 COPY --chmod=0755 start-systemd.sh /usr/local/bin/start-systemd.sh
 COPY --chmod=0755 start-desktop.sh /usr/local/bin/start-desktop.sh
 COPY --chmod=0644 vnc-desktop.service /etc/systemd/system/vnc-desktop.service
+COPY --chmod=0644 vnc-novnc.service /etc/systemd/system/vnc-novnc.service
 
 # Services that a normal Fedora boot starts. This must run as root, so it
 # stays above the USER switch.
-RUN systemctl enable vnc-desktop.service 2>/dev/null || true
+RUN systemctl enable vnc-desktop.service vnc-novnc.service 2>/dev/null || true
 
 # sshd: a real Fedora service under systemd (Codespaces' SSH bridge can use
 # it, and `systemctl status sshd` reads like on a normal machine).
