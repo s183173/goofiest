@@ -34,6 +34,14 @@ RUN (dnf install -y plasma-welcome || \
      echo "[build] plasma-welcome unavailable, skipping") \
     && dnf clean all
 
+# Brand the system like the KDE Spin instead of "Container Image".
+RUN sed -i \
+      -e 's|^PRETTY_NAME=.*|PRETTY_NAME="Fedora Linux 44 (KDE Plasma)"|' \
+      -e 's|^VERSION=.*|VERSION="44 (KDE Plasma)"|' \
+      -e 's|^VARIANT=.*|VARIANT="KDE Plasma"|' \
+      -e 's|^VARIANT_ID=.*|VARIANT_ID=kde|' \
+      /usr/lib/os-release
+
 # sshd host keys so Codespaces can bring up its SSH bridge on connect.
 RUN ssh-keygen -A
 

@@ -1,25 +1,24 @@
 #!/bin/bash
-# Boots a nested systemd so the container behaves like a real Fedora system:
-# `systemctl` works, journald logs, a system D-Bus runs, and enabled units
-# (including the vnc-desktop.service that draws the desktop) are started by
-# systemd itself, like on any Fedora machine.
+# Attempts to boot systemd so `systemctl` behaves like on a real Fedora
+# system, with the desktop started by vnc-desktop.service.
 #
-# systemd insists on being PID 1. Inside a fresh PID namespace created with
-# `unshare --pid` it *is* PID 1 — the same thing every container runtime
-# does when running a systemd container. Codespace containers are
-# privileged, so the namespace and cgroup operations succeed. If systemd
-# cannot come up in this sandbox, this script exits non-zero and the caller
-# (start-desktop.sh) falls back to starting the desktop directly.
+# HONEST LIMITATION: GitHub Codespace containers run with no effective
+# capabilities (CapEff=0), a read-only cgroup2 mount, and seccomp-blocked
+# unshare — verified empirically. systemd refuses to run as a non-PID1
+# process ("Can't run system mode unless PID 1"), and creating a PID
+# namespace (the way container runtimes give systemd a PID 1) requires
+# CAP_SYS_ADMIN, which these containers do not have. So on GitHub
+# Codespaces this script always fast-fails, and start-desktop.sh falls back
+# to starting the VNC stack directly. On other devcontainer hosts (plain
+# Docker with --privileged, podman, ...) the nested-systemd boot below
+# DOES work and is used.
+#
+# If systemd boots, vnc-desktop.service (enabled in the image) starts the
+# desktop; otherwise the caller handles it. Either way this exits quickly.
 set -u
 
 SYSTEMD=/usr/lib/systemd/systemd
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
-
-# systemd detects "running in a container" through the environment.
-# container=docker makes it skip pieces that cannot work here (udev, VT
-# consoles, swap) and tolerate a read-only cgroup tree instead of refusing
-# to boot.
-export container=docker
 
 # Already booted? /run/systemd/system is systemd's "booted" marker.
 if [ -d /run/systemd/system ]; then
@@ -27,8 +26,29 @@ if [ -d /run/systemd/system ]; then
     exit 0
 fi
 
+# Fast pre-flight: can we create a PID namespace at all? (needs
+# CAP_SYS_ADMIN; GitHub Codespaces: no.) This avoids the pointless
+# wait-and-retry cycle when the answer is a hard no.
+if ! $SUDO unshare --pid --fork /bin/true >/dev/null 2>&1; then
+    echo "[start-systemd] This container cannot run systemd:"
+    echo "[start-systemd]   no CAP_SYS_ADMIN / unshare blocked and systemd"
+    echo "[start-systemd]   refuses to run as a non-PID1 process."
+    echo "[start-systemd] Falling back to direct desktop startup."
+    # Make sure the session runtime dir exists even on this path.
+    VSC_UID="$(id -u vscode 2>/dev/null || echo 1000)"
+    $SUDO mkdir -p "/run/user/$VSC_UID" 2>/dev/null || true
+    $SUDO chown "$VSC_UID:$VSC_UID" "/run/user/$VSC_UID" 2>/dev/null || true
+    $SUDO chmod 700 "/run/user/$VSC_UID" 2>/dev/null || true
+    exit 1
+fi
+
+# systemd detects "running in a container" through the environment.
+# container=docker makes it skip pieces that cannot work here (udev, VT
+# consoles, swap) and tolerate a read-only cgroup tree instead of refusing
+# to boot.
+export container=docker
+
 echo "[start-systemd] Booting systemd (nested container-init)..."
-# Preferred: give systemd its own PID namespace so it really is PID 1.
 $SUDO env container=docker unshare --fork --pid --mount-proc \
     "$SYSTEMD" --system --unit=multi-user.target \
     > /tmp/systemd-boot.log 2>&1 &
@@ -40,22 +60,9 @@ for _ in $(seq 1 20); do
     sleep 1
 done
 
-# Fallback: run systemd directly in this namespace. Newer systemd refuses
-# ("Can't run system mode unless PID 1"), but tolerate the attempt.
-if [ ! -d /run/systemd/system ]; then
-    echo "[start-systemd] unshare attempt failed; trying without a PID namespace..."
-    $SUDO env container=docker "$SYSTEMD" --system --unit=multi-user.target \
-        > /tmp/systemd-boot.log 2>&1 &
-    disown 2>/dev/null || true
-    for _ in $(seq 1 15); do
-        [ -d /run/systemd/system ] && break
-        sleep 1
-    done
-fi
-
 if [ ! -d /run/systemd/system ]; then
     echo "[start-systemd] systemd did not come up; last log lines:" >&2
-    tail -20 /tmp/systemd-boot.log >&2 2>/dev/null || true
+    tail -5 /tmp/systemd-boot.log >&2 2>/dev/null || true
     exit 1
 fi
 
