@@ -19,3 +19,5 @@ if ! pgrep -f "websockify.*6080" > /dev/null; then
 else
     echo "[start-vnc] noVNC already running."
 fi
+
+exit 0
