@@ -7,6 +7,7 @@ After=systemd-user-sessions.service network.target
 Type=oneshot
 RemainAfterExit=yes
 User=vscode
+Environment=HOME=/home/vscode
 ExecStart=/usr/local/bin/start-vnc.sh
 TimeoutStartSec=180
 

@@ -55,6 +55,19 @@ RUN useradd -m -s /bin/bash vscode && \
     echo "vscode ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/vscode && \
     chmod 0440 /etc/sudoers.d/vscode
 
+# A normal Fedora KDE first boot does not show a lock screen, and a VNC
+# session cannot be unlocked through the greeter without a login password
+# (with systemd running, kscreenlocker is fully functional and WILL engage).
+# Match the first-boot behaviour: no automatic locking. Also give vscode a
+# login password ("password", same as the VNC password) so the lock greeter
+# stays usable if someone locks the screen by hand.
+RUN printf '%s\n' \
+    '[Daemon]' \
+    'Autolock=false' \
+    'LockOnResume=false' \
+    > /etc/xdg/kscreenlockerrc && \
+    echo "vscode:password" | chpasswd
+
 # Codespaces always mounts the repo at /workspaces/<repo>; a symlink makes
 # it feel like a normal Fedora home ("my project lives in my home dir").
 # VS Code still opens /workspaces/goofiest as the workspace.
@@ -68,11 +81,15 @@ COPY --chmod=0755 start-vnc.sh /usr/local/bin/start-vnc.sh
 COPY --chmod=0755 start-systemd.sh /usr/local/bin/start-systemd.sh
 COPY --chmod=0755 start-desktop.sh /usr/local/bin/start-desktop.sh
 COPY --chmod=0644 vnc-desktop.service /etc/systemd/system/vnc-desktop.service
+COPY --chmod=0644 vnc-novnc.service /etc/systemd/system/vnc-novnc.service
 
-# The desktop comes up with the systemd boot (see start-systemd.sh); the
-# enablement is done here at build time, like any Fedora service. This must
-# run as root, so it stays above the USER switch.
-RUN systemctl enable vnc-desktop.service 2>/dev/null || true
+# Services that a normal Fedora boot starts. This must run as root, so it
+# stays above the USER switch.
+RUN systemctl enable vnc-desktop.service vnc-novnc.service 2>/dev/null || true
+
+# sshd: a real Fedora service under systemd (Codespaces' SSH bridge can use
+# it, and `systemctl status sshd` reads like on a normal machine).
+RUN systemctl enable sshd.service 2>/dev/null || true
 
 USER vscode
 
@@ -91,4 +108,11 @@ RUN printf '%s\n' \
     chmod +x /home/vscode/.vnc/xstartup
 
 EXPOSE 6080
-USER vscode
+
+# The container's main process. With the devcontainer "privileged": true +
+# "overrideCommand": false properties honoured, this boots systemd as the
+# real init — a normal Fedora machine power-on (see container-init.sh). It
+# must run as root: system systemd refuses to run as a non-root PID 1.
+COPY --chmod=0755 container-init.sh /usr/local/bin/container-init.sh
+USER root
+CMD ["/usr/local/bin/container-init.sh"]
