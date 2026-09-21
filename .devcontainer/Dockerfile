@@ -8,8 +8,9 @@ FROM quay.io/fedora/fedora:44
 # (plasma-workspace-x11); TigerVNC's Xvnc needs startplasma-x11 from it, so
 # it stays explicit. openssh-server is what GitHub Codespaces' "gh codespace
 # ssh" connects to.
-RUN dnf install -y \
-    @kde-desktop-environment \
+RUN (dnf install -y @kde-desktop-environment \
+      || dnf install -y @kde-desktop) \
+    && dnf install -y \
     plasma-workspace-x11 \
     tigervnc-server \
     novnc \
