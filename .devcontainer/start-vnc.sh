@@ -5,6 +5,13 @@ set -u
 # any process whose command line merely mentions those strings (e.g. the
 # very shell running this script), which silently skips startup.
 
+# Plasma expects an XDG_RUNTIME_DIR. When the desktop is started by systemd
+# (vnc-desktop.service) the variable is not set for system units, so provide
+# it best-effort here.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+
 # Start the VNC server if nothing is listening on 5901.
 if timeout 1 bash -c '</dev/tcp/127.0.0.1/5901' 2>/dev/null; then
     echo "[start-vnc] VNC server already running."
