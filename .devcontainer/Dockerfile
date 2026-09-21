@@ -55,6 +55,19 @@ RUN useradd -m -s /bin/bash vscode && \
     echo "vscode ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/vscode && \
     chmod 0440 /etc/sudoers.d/vscode
 
+# A normal Fedora KDE first boot does not show a lock screen, and a VNC
+# session cannot be unlocked through the greeter without a login password
+# (with systemd running, kscreenlocker is fully functional and WILL engage).
+# Match the first-boot behaviour: no automatic locking. Also give vscode a
+# login password ("password", same as the VNC password) so the lock greeter
+# stays usable if someone locks the screen by hand.
+RUN printf '%s\n' \
+    '[Daemon]' \
+    'Autolock=false' \
+    'LockOnResume=false' \
+    > /etc/xdg/kscreenlockerrc && \
+    echo "vscode:password" | chpasswd
+
 # Codespaces always mounts the repo at /workspaces/<repo>; a symlink makes
 # it feel like a normal Fedora home ("my project lives in my home dir").
 # VS Code still opens /workspaces/goofiest as the workspace.
