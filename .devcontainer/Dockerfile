@@ -109,10 +109,20 @@ RUN printf '%s\n' \
 
 EXPOSE 6080
 
+# How "docker stop" asks this container's PID 1 to shut down. systemd's
+# canonical power-off signal is SIGRTMIN+3 (SIGTERM means "re-exec yourself"
+# to systemd and never stops it — the classic "docker stop hangs on systemd
+# containers" trap). With this, any runtime that stops the container
+# (Codespaces prebuild snapshots, `gh codespace stop`, local docker) gets a
+# clean, fast Fedora shutdown instead of a hang.
+STOPSIGNAL SIGRTMIN+3
+
 # The container's main process. With the devcontainer "privileged": true +
-# "overrideCommand": false properties honoured, this boots systemd as the
-# real init — a normal Fedora machine power-on (see container-init.sh). It
-# must run as root: system systemd refuses to run as a non-root PID 1.
+# "overrideCommand": false properties honoured, real user sessions boot
+# systemd as the true init — a normal Fedora machine power-on. Prebuild
+# containers (no user session yet) deliberately stay a keep-alive shim so
+# the prebuild snapshot is clean and fast (see container-init.sh).
+# It must run as root: system systemd refuses to run as a non-root PID 1.
 COPY --chmod=0755 container-init.sh /usr/local/bin/container-init.sh
 USER root
 CMD ["/usr/local/bin/container-init.sh"]

@@ -12,8 +12,10 @@
   //                            a forced "sleep infinity" loop, so systemd
   //                            can be the true init, exactly like a
   //                            normal Fedora machine booting up.
-  // container-init.sh keeps every path safe: if either property is not
-  // honoured, it falls back to the previous direct-start behaviour.
+  // container-init.sh keeps every path safe: real user sessions boot
+  // systemd; prebuild containers (no CODESPACE_NAME yet) stay a plain
+  // keep-alive shim so the prebuild snapshot stays clean and the shutdown
+  // job never hangs on a systemd that ignores SIGTERM.
   "privileged": true,
   "overrideCommand": false,
   "forwardPorts": [
