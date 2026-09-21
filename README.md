@@ -27,19 +27,24 @@ path in the desktop's file manager and terminal.
 ## Details
 
 - **Base image**: Fedora 44 (`quay.io/fedora/fedora:44`), supported until
-  ~May 2027.
+  ~May 2027. `os-release` is re-branded like the KDE Spin
+  (`Fedora Linux 44 (KDE Plasma)`).
 - **Desktop**: the full `@kde-desktop-environment` group — the same package
   set the Fedora KDE Spin installs (Dolphin, Konsole, Spectacle, KDE
   Settings, system tray applets, wallpapers, ...). KDE Plasma runs on X11;
   since Fedora 43 `startplasma-x11` lives in the separate
   `plasma-workspace-x11` package, which is installed explicitly because
   TigerVNC's `Xvnc` needs it.
-- **systemd**: containers do not boot systemd by default, so the start
-  scripts boot a nested systemd in a PID namespace (the same trick container
-  runtimes use). `systemctl` therefore behaves like on a real Fedora
-  system, journald collects logs, and the desktop itself is an enabled
-  system unit (`vnc-desktop.service`) that systemd starts on boot. Try
-  `systemctl status vnc-desktop` or `journalctl -b` in the terminal.
+- **systemd**: this is the one place where a container cannot match a real
+  Fedora install. systemd refuses to run as a non-PID-1 process, and GitHub
+  Codespace containers run with no capabilities (CapEff=0), a read-only
+  cgroup2 mount, and blocked `unshare` — so neither a nested-systemd boot
+  nor any other runtime trick can provide real systemd there. The startup
+  scripts still *attempt* a nested systemd boot (that works on privileged
+  Docker/podman hosts, where `systemctl`, `journalctl` and the enabled
+  `vnc-desktop.service` then behave like on any Fedora machine) and fall
+  back to starting the desktop directly on Codespaces, with a clear message
+  in the log instead of a mysterious failure.
 - **Onboarding**: `plasma-welcome` (the KDE Welcome Center) autostarts on
   first login via the stock XDG autostart mechanism.
 - **Remote access**: TigerVNC's `Xvnc` serves display `:1`, `websockify`
@@ -55,12 +60,13 @@ path in the desktop's file manager and terminal.
 ## How the desktop starts
 
 1. Codespaces runs `postStartCommand` → `/usr/local/bin/start-desktop.sh`.
-2. `start-desktop.sh` boots systemd (`start-systemd.sh`) and waits for the
-   desktop to appear.
-3. systemd starts the enabled `vnc-desktop.service`, which runs
-   `start-vnc.sh` as the `vscode` user.
-4. `start-vnc.sh` starts `Xvnc :1` (with the stock `xstartup`:
-   `dbus-run-session -- startplasma-x11`) and the noVNC/websockify bridge.
+2. `start-desktop.sh` tries to boot systemd (`start-systemd.sh`). On hosts
+   that allow it, systemd starts the enabled `vnc-desktop.service`.
+3. Where systemd is impossible (GitHub Codespaces — see above), the script
+   falls back immediately to `start-vnc.sh` as the `vscode` user.
+4. Either way `start-vnc.sh` ends up running `Xvnc :1` (with the stock
+   `xstartup`: `dbus-run-session -- startplasma-x11`) and the
+   noVNC/websockify bridge, detached so Codespaces cannot reap it.
 
 Everything is idempotent (port probes, not process-name guesses), so it is
 safe to re-run on every container start or attach, and the script heals
@@ -93,9 +99,11 @@ stale `/tmp/.X1-lock` files after unclean container shutdowns by itself.
   container comes up, then reload the tab.
 - **Desktop looks frozen after long idle**: Codespaces stops idle containers.
   Restart the Codespace; `postStartCommand` brings the desktop back.
-- **`systemctl` says "System has not been booted with systemd"**: the nested
-  systemd did not come up this boot (rare). Run
-  `sudo /usr/local/bin/start-systemd.sh` and check `/tmp/systemd-boot.log`.
+- **`systemctl` says "System has not been booted with systemd"**: expected
+  on GitHub Codespaces — their containers cannot run systemd (no
+  capabilities, read-only cgroups). Everything else works as usual. On a
+  privileged Docker/podman host the same image boots systemd and
+  `systemctl`/`journalctl` behave normally.
 - **Anything else broken**: run **Codespaces: Rebuild Container** for a
   clean rebuild from the Dockerfile.
 
