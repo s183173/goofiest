@@ -28,11 +28,10 @@ RUN (dnf install -y f44-backgrounds-kde kde-settings || \
      echo "[build] branding extras unavailable, skipping") \
     && dnf clean all
 
-# Onboarding: the KDE Welcome Center, which also autostarts on first login
-# on a fresh Fedora KDE account. Same tolerant pattern as above.
-RUN (dnf install -y plasma-welcome || \
-     echo "[build] plasma-welcome unavailable, skipping") \
-    && dnf clean all
+# No KDE Welcome Center: it is a first-login onboarding popup, and its
+# kded module is disabled in /etc/xdg/kdedrc below anyway. Keeping it out
+# of the image also keeps the "what you see is a clean Fedora KDE desktop"
+# promise on first boot.
 
 # Brand the system like the KDE Spin instead of "Container Image".
 RUN sed -i \
@@ -45,9 +44,12 @@ RUN sed -i \
 # sshd host keys so Codespaces can bring up its SSH bridge on connect.
 RUN ssh-keygen -A
 
-# Units that cannot work inside a container (no VTs) would otherwise show
-# up as failed services on `systemctl`; mask/disable them quietly.
-RUN systemctl mask getty@.service serial-getty@.service 2>/dev/null; \
+# Units that cannot work inside a container (no VTs, no hardware audit
+# or MCE support) would otherwise show up as failed services and make
+# `systemctl is-system-running` report "degraded" instead of "running".
+# Mask/disable them quietly.
+RUN systemctl mask getty@.service serial-getty@.service \
+      auditd.service audit-rules.service mcelog.service 2>/dev/null; \
     systemctl disable sddm.service 2>/dev/null; true
 
 # Non-root user with passwordless sudo (Codespaces-friendly name).
@@ -67,6 +69,38 @@ RUN printf '%s\n' \
     'LockOnResume=false' \
     > /etc/xdg/kscreenlockerrc && \
     echo "vscode:password" | chpasswd
+
+# Fast first boot on a 2-core codespace. /etc/xdg is KConfig's system-wide
+# default layer, so these apply from the very first login (before the user
+# has any ~/.config of their own):
+# - baloo file indexing off — a first login would otherwise index $HOME and
+#   /workspaces, pinning both cores for minutes while the desktop "looks
+#   blank".
+# - ksplash off — the splash is a QtQuick/OpenGL scene rendered by Xvnc's
+#   software rasterizer; it delays the desktop instead of decorating it.
+# - kwin compositing off — compositing runs on llvmpipe (software GL), which
+#   burns CPU constantly for transparency effects nobody can see over VNC.
+# - plasma-welcome kded module off — its only job is a first-login popup.
+# The korgac autostart is removed for the same reason: it pulls in the
+# whole akonadi PIM stack on every login (see the akonadiserverrc below).
+RUN printf '%s\n' \
+      '[Basic Settings]' \
+      'Indexing-Enabled=false' \
+      > /etc/xdg/baloofilerc && \
+    printf '%s\n' \
+      '[KSplash][$i]' \
+      'Engine=none' \
+      'Theme=None' \
+      > /etc/xdg/ksplashrc && \
+    printf '%s\n' \
+      '[Compositing]' \
+      'Enabled=false' \
+      > /etc/xdg/kwinrc && \
+    printf '%s\n' \
+      '[Module-plasma-welcome]' \
+      'autoload=false' \
+      > /etc/xdg/kdedrc && \
+    rm -f /etc/xdg/autostart/org.kde.korgac.desktop
 
 # Codespaces always mounts the repo at /workspaces/<repo>; a symlink makes
 # it feel like a normal Fedora home ("my project lives in my home dir").
@@ -93,16 +127,29 @@ RUN systemctl enable sshd.service 2>/dev/null || true
 
 USER vscode
 
+# No PIM stack. @kde-desktop-environment pulls in akonadi (KDE's personal
+# information manager), which — if anything ever activates it — starts a
+# private MariaDB server (mysqld) eating hundreds of MB of RAM on a 2-core
+# machine. This tells akonadi to never start its server; harmless if the
+# user later wants KMail & co. (they can flip this file back).
+RUN mkdir -p /home/vscode/.config/akonadi && \
+    printf '%s\n' '[Startup]' 'StartServer=false' \
+      > /home/vscode/.config/akonadi/akonadiserverrc
+
 # VNC password. Change "password" to something else and rebuild to update.
 RUN mkdir -p /home/vscode/.vnc && \
     echo "password" | vncpasswd -f > /home/vscode/.vnc/passwd && \
     chmod 600 /home/vscode/.vnc/passwd
 
-# Launch KDE Plasma (X11) in its own session D-Bus when VNC starts.
+# Launch KDE Plasma (X11) in its own session D-Bus when VNC starts. The
+# xsetroot line paints the root window immediately (dark Fedora-blue) so
+# the noVNC canvas visibly "connects to something" while Plasma is still
+# booting, instead of showing an unpainted black screen.
 RUN printf '%s\n' \
     '#!/bin/sh' \
     'unset SESSION_MANAGER' \
     'unset DBUS_SESSION_BUS_ADDRESS' \
+    "xsetroot -solid '#151e2e' || true" \
     'exec dbus-run-session -- startplasma-x11' \
     > /home/vscode/.vnc/xstartup && \
     chmod +x /home/vscode/.vnc/xstartup
