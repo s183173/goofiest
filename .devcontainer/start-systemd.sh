@@ -2,16 +2,16 @@
 # Attempts to boot systemd so `systemctl` behaves like on a real Fedora
 # system, with the desktop started by vnc-desktop.service.
 #
-# HONEST LIMITATION: GitHub Codespace containers run with no effective
-# capabilities (CapEff=0), a read-only cgroup2 mount, and seccomp-blocked
-# unshare — verified empirically. systemd refuses to run as a non-PID1
-# process ("Can't run system mode unless PID 1"), and creating a PID
-# namespace (the way container runtimes give systemd a PID 1) requires
-# CAP_SYS_ADMIN, which these containers do not have. So on GitHub
-# Codespaces this script always fast-fails, and start-desktop.sh falls back
-# to starting the VNC stack directly. On other devcontainer hosts (plain
-# Docker with --privileged, podman, ...) the nested-systemd boot below
-# DOES work and is used.
+# CONTEXT (verified live, Sep 2026): GitHub Codespaces DOES honour the
+# devcontainer "privileged": true + "overrideCommand": false properties.
+# In a user-session codespace, the image CMD (container-init.sh) runs as
+# PID 1 and execs the real systemd, so this script normally finds it
+# already running (/run/systemd/system exists) and exits 0 immediately.
+# The nested-unshare boot below still matters for hosts that grant the
+# container CAP_SYS_ADMIN but keep PID 1 for themselves; the fast-fail
+# path covers everything else (prebuild-style sandboxes, unprivileged
+# local runs), where start-desktop.sh falls back to starting the VNC
+# stack directly.
 #
 # If systemd boots, vnc-desktop.service (enabled in the image) starts the
 # desktop; otherwise the caller handles it. Either way this exits quickly.

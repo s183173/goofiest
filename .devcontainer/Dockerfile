@@ -28,10 +28,13 @@ RUN (dnf install -y f44-backgrounds-kde kde-settings || \
      echo "[build] branding extras unavailable, skipping") \
     && dnf clean all
 
-# No KDE Welcome Center: it is a first-login onboarding popup, and its
-# kded module is disabled in /etc/xdg/kdedrc below anyway. Keeping it out
-# of the image also keeps the "what you see is a clean Fedora KDE desktop"
-# promise on first boot.
+# No KDE Welcome Center. @kde-desktop-environment pulls it in (it is the
+# Spin's first-login onboarding popup), but on a 2-core VNC desktop it is
+# pure startup cost and clutter, so take it back out after the group
+# install. Tolerant so a renamed package can never break the build.
+RUN (dnf remove -y plasma-welcome || \
+     echo "[build] plasma-welcome not present, nothing to remove") \
+    && dnf clean all
 
 # Brand the system like the KDE Spin instead of "Container Image".
 RUN sed -i \
@@ -56,6 +59,17 @@ RUN systemctl mask getty@.service serial-getty@.service \
 RUN useradd -m -s /bin/bash vscode && \
     echo "vscode ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/vscode && \
     chmod 0440 /etc/sudoers.d/vscode
+
+# Enable lingering for the desktop user. The whole KDE session runs as a
+# system service (vnc-desktop.service) out of /run/user/<uid>, but without
+# a login session, closing an SSH login used to stop user@<uid>.service
+# and try to tear down /run/user/<uid> — the "User Runtime Directory" unit
+# then failed (directory still in use by the desktop) and left systemd
+# "degraded". With lingering, the user manager is up from first boot,
+# `systemctl --user` works in terminals, and the runtime directory is
+# never torn down underneath the desktop. enable-linger is just this
+# marker file, so it can be created at image build time.
+RUN mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/vscode
 
 # A normal Fedora KDE first boot does not show a lock screen, and a VNC
 # session cannot be unlocked through the greeter without a login password
