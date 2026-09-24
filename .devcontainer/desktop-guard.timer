@@ -1,0 +1,9 @@
+[Unit]
+Description=Run the desktop guard periodically
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=45s
+
+[Install]
+WantedBy=timers.target

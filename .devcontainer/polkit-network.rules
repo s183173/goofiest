@@ -1,0 +1,12 @@
+// The VNC desktop session is not a logind "active" session (no VT in a
+// container), so polkit's default for NetworkManager network-control is
+// auth_admin and Plasma pops an "Authentication Required" dialog at every
+// boot ("System policy prevents control of network connections"). A real
+// Fedora KDE install allows the active local user silently; allow the
+// desktop user here for the same first-boot experience.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.NetworkManager.network-control" &&
+        subject.user == "vscode") {
+        return polkit.Result.yes;
+    }
+});

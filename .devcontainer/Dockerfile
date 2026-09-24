@@ -125,12 +125,16 @@ RUN ln -sfn /workspaces/goofiest /home/vscode/goofiest
 COPY --chmod=0755 start-vnc.sh /usr/local/bin/start-vnc.sh
 COPY --chmod=0755 start-systemd.sh /usr/local/bin/start-systemd.sh
 COPY --chmod=0755 start-desktop.sh /usr/local/bin/start-desktop.sh
+COPY --chmod=0755 desktop-guard.sh /usr/local/bin/desktop-guard.sh
 COPY --chmod=0644 vnc-desktop.service /etc/systemd/system/vnc-desktop.service
 COPY --chmod=0644 vnc-novnc.service /etc/systemd/system/vnc-novnc.service
+COPY --chmod=0644 desktop-guard.service /etc/systemd/system/desktop-guard.service
+COPY --chmod=0644 desktop-guard.timer /etc/systemd/system/desktop-guard.timer
+COPY --chmod=0644 polkit-network.rules /etc/polkit-1/rules.d/10-codespaces-network.rules
 
 # Services that a normal Fedora boot starts. This must run as root, so it
 # stays above the USER switch.
-RUN systemctl enable vnc-desktop.service vnc-novnc.service 2>/dev/null || true
+RUN systemctl enable vnc-desktop.service vnc-novnc.service desktop-guard.timer 2>/dev/null || true
 
 # sshd: a real Fedora service under systemd (Codespaces' SSH bridge can use
 # it, and `systemctl status sshd` reads like on a normal machine).
@@ -152,15 +156,34 @@ RUN mkdir -p /home/vscode/.vnc && \
     echo "password" | vncpasswd -f > /home/vscode/.vnc/passwd && \
     chmod 600 /home/vscode/.vnc/passwd
 
-# Launch KDE Plasma (X11) in its own session D-Bus when VNC starts. The
-# xsetroot line paints the root window immediately (dark Fedora-blue) so
-# the noVNC canvas visibly "connects to something" while Plasma is still
-# booting, instead of showing an unpainted black screen.
+# Launch KDE Plasma (X11) when VNC starts. The xsetroot line paints the
+# root window immediately (dark Fedora-blue) so the noVNC canvas visibly
+# "connects to something" while Plasma is still booting, instead of
+# showing an unpainted black screen.
+#
+# The session bus choice matters: with the old `dbus-run-session --`
+# wrapper Plasma could not see the systemd user manager on its bus and
+# silently fell back to "legacy forking mode" — plasmashell/kded6 ran as
+# unsupervised forked children, and when user@1000.service ever bounced
+# they died with it and NOTHING restarted them, leaving the bare root
+# window (the "black noVNC desktop" bug). The desktop user is lingered,
+# so /run/user/<uid>/bus (the user manager's own bus, which exposes
+# org.freedesktop.systemd1) is always alive: pointing
+# DBUS_SESSION_BUS_ADDRESS at it makes Plasma adopt full systemd startup
+# and run plasmashell & co. as auto-restarting user units
+# (plasma-plasmashell.service ...). The dbus-send probe verifies the bus
+# is really alive and keeps the old wrapper as a fallback for sandboxes
+# without systemd.
 RUN printf '%s\n' \
     '#!/bin/sh' \
     'unset SESSION_MANAGER' \
-    'unset DBUS_SESSION_BUS_ADDRESS' \
     "xsetroot -solid '#151e2e' || true" \
+    'if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/bus" ]; then' \
+    '    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"' \
+    '    if dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply / org.freedesktop.DBus.ListNames >/dev/null 2>&1; then' \
+    '        exec startplasma-x11' \
+    '    fi' \
+    'fi' \
     'exec dbus-run-session -- startplasma-x11' \
     > /home/vscode/.vnc/xstartup && \
     chmod +x /home/vscode/.vnc/xstartup

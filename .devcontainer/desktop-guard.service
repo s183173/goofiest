@@ -1,0 +1,7 @@
+[Unit]
+Description=Self-healing guard for the KDE desktop session
+After=vnc-desktop.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/desktop-guard.sh
