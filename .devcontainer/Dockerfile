@@ -28,13 +28,13 @@ RUN (dnf install -y f44-backgrounds-kde kde-settings || \
      echo "[build] branding extras unavailable, skipping") \
     && dnf clean all
 
-# No KDE Welcome Center. @kde-desktop-environment pulls it in (it is the
-# Spin's first-login onboarding popup), but on a 2-core VNC desktop it is
-# pure startup cost and clutter, so take it back out after the group
-# install. Tolerant so a renamed package can never break the build.
-RUN (dnf remove -y plasma-welcome || \
-     echo "[build] plasma-welcome not present, nothing to remove") \
-    && dnf clean all
+# Keep the KDE Welcome Center (plasma-welcome): it is the Fedora KDE Spin's
+# first-boot setup screen. Its kded module (kded_plasma_welcome.so) pops it
+# up on the very first Plasma login and records that in the user's config,
+# so it appears on first boot and not again — stock Fedora behaviour.
+# Ensure no stale "already shown" marker ships in the image so a fresh
+# codespace always gets the first-boot setup screen:
+RUN rm -f /home/vscode/.config/plasma-welcomerc
 
 # Brand the system like the KDE Spin instead of "Container Image".
 RUN sed -i \
@@ -94,7 +94,8 @@ RUN printf '%s\n' \
 #   software rasterizer; it delays the desktop instead of decorating it.
 # - kwin compositing off — compositing runs on llvmpipe (software GL), which
 #   burns CPU constantly for transparency effects nobody can see over VNC.
-# - plasma-welcome kded module off — its only job is a first-login popup.
+# (the plasma-welcome kded module is intentionally NOT disabled: it is what
+# shows the Fedora KDE first-boot setup screen the user wants)
 # The korgac autostart is removed for the same reason: it pulls in the
 # whole akonadi PIM stack on every login (see the akonadiserverrc below).
 RUN printf '%s\n' \
@@ -110,10 +111,6 @@ RUN printf '%s\n' \
       '[Compositing]' \
       'Enabled=false' \
       > /etc/xdg/kwinrc && \
-    printf '%s\n' \
-      '[Module-plasma-welcome]' \
-      'autoload=false' \
-      > /etc/xdg/kdedrc && \
     rm -f /etc/xdg/autostart/org.kde.korgac.desktop
 
 # Codespaces always mounts the repo at /workspaces/<repo>; a symlink makes
