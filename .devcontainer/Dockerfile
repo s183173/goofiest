@@ -98,6 +98,12 @@ RUN printf '%s\n' \
 # shows the Fedora KDE first-boot setup screen the user wants)
 # The korgac autostart is removed for the same reason: it pulls in the
 # whole akonadi PIM stack on every login (see the akonadiserverrc below).
+# The xwaylandvideobridge autostart is removed too: it exists to mirror
+# Wayland screencasts into X11 windows, which is meaningless here (Xvnc is
+# plain X11, there is no Wayland compositor) — and on Xvnc its idle
+# "recording bridge" window is not hidden as designed, leaving a black
+# 640x360 rectangle covering the top-left of the desktop (live-verified:
+# killing the process restores the wallpaper under it).
 RUN printf '%s\n' \
       '[Basic Settings]' \
       'Indexing-Enabled=false' \
@@ -111,7 +117,8 @@ RUN printf '%s\n' \
       '[Compositing]' \
       'Enabled=false' \
       > /etc/xdg/kwinrc && \
-    rm -f /etc/xdg/autostart/org.kde.korgac.desktop
+    rm -f /etc/xdg/autostart/org.kde.korgac.desktop \
+          /etc/xdg/autostart/org.kde.xwaylandvideobridge.desktop
 
 # Codespaces always mounts the repo at /workspaces/<repo>; a symlink makes
 # it feel like a normal Fedora home ("my project lives in my home dir").
